@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
 
 const app = express();
@@ -15,26 +15,27 @@ app.get('/', (req, res) => {
   res.send('UpStudy Code is Cooking!');
 });
 
-// ✅ MongoDB URI
+// MongoDB URI
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.zmzpu5s.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
+    strict: false,
   }
 });
 
 let articlesCollection;
+let commentsCollection;
 
 async function run() {
   try {
     await client.connect();
     const db = client.db('upstudy-server');
     articlesCollection = db.collection('articles');
+    commentsCollection = db.collection('comments');
 
-    // ✅ Get all or filter by category/email
+    // Articles APIs
     app.get("/api/articles", async (req, res) => {
       const { email, category } = req.query;
       const filter = {};
@@ -45,34 +46,73 @@ async function run() {
       res.json(articles);
     });
 
-    // newArticle.createdAt = new Date();
-    
-        // ✅ All Articles
     app.get('/articles', async (req, res) => {
       const articles = await articlesCollection.find().toArray();
       res.send(articles);
     });
 
-    // ✅ Get Featured (latest 6)
     app.get("/api/featured", async (req, res) => {
       const featured = await articlesCollection.find().sort({ createdAt: -1 }).limit(6).toArray();
       res.json(featured);
     });
 
-    // ✅ Post new article
     app.post("/api/articles", async (req, res) => {
       const newArticle = req.body;
       const result = await articlesCollection.insertOne(newArticle);
       res.send(result);
     });
 
-    // ✅ Get categories
     app.get('/api/categories', async (req, res) => {
       const categories = await articlesCollection.distinct("category");
       res.json(categories);
     });
 
-    // ✅ MongoDB ping
+    // Comment APIs
+
+    // Post new comment
+    app.post("/api/comments", async (req, res) => {
+      const comment = req.body;
+      const newComment = {
+        articleId: comment.articleId,
+        userId: comment.userId,
+        userName: comment.userName,
+        userPhoto: comment.userPhoto,
+        commentText: comment.commentText,
+        likes: 0,
+        createdAt: new Date(),
+      };
+
+      const result = await commentsCollection.insertOne(newComment);
+      res.send(result);
+    });
+
+    // Get all comments or filter by articleId
+    app.get("/api/comments", async (req, res) => {
+      const { articleId } = req.query;
+      const filter = articleId ? { articleId } : {};
+      const comments = await commentsCollection.find(filter).sort({ createdAt: -1 }).toArray();
+      res.send(comments);
+    });
+
+    // Like (increment likes by 1)
+    app.patch("/api/comments/:id/like", async (req, res) => {
+      const id = req.params.id;
+      const result = await commentsCollection.findOneAndUpdate(
+        { _id: new ObjectId(id) },
+        { $inc: { likes: 1 } },
+        { returnDocument: "after" }
+      );
+      res.send(result.value);
+    });
+
+    // Delete comment by ID
+    app.delete("/api/comments/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await commentsCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
+    // MongoDB ping
     await db.command({ ping: 1 });
     console.log("✅ Connected to MongoDB");
 
@@ -80,6 +120,7 @@ async function run() {
     console.error("❌ MongoDB connection failed", err);
   }
 }
+
 run().catch(console.dir);
 
 // Start server
