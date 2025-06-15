@@ -64,6 +64,29 @@ async function run() {
       res.json(articles);
     });
 
+    // ✅ Get My Articles by Email
+    app.get("/api/my-articles", async (req, res) => {
+      const email = req.query.email;
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      const myArticles = await articlesCollection
+        .find({ authorEmail: email }) // এখানে 'authorEmail' use করো যদি DB তে সেটাই থাকে
+        .sort({ createdAt: -1 })
+        .toArray();
+
+      res.json(myArticles);
+    });
+
+
+    // PostArticle
+    app.post('/api/articles', async (req, res) => {
+      const newArticle = req.body;
+      const result = await articlesCollection.insertOne(newArticle);
+      res.send(result);
+    });
+
     // ✅ Ping the database
     await db.command({ ping: 1 });
     console.log("✅ Successfully connected to MongoDB");
