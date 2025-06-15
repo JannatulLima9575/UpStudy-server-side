@@ -6,13 +6,13 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// middleware
+// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Default route
+// Root Route
 app.get('/', (req, res) => {
-  res.send('UpStudy Code is Cooking!');
+  res.send('🚀 UpStudy Code is Cooking!');
 });
 
 // MongoDB URI
@@ -35,7 +35,11 @@ async function run() {
     articlesCollection = db.collection('articles');
     commentsCollection = db.collection('comments');
 
-    // Articles APIs
+    // -------------------------
+    // 🔹 ARTICLE ROUTES
+    // -------------------------
+
+    // Get all articles (optional filter by email/category)
     app.get("/api/articles", async (req, res) => {
       const { email, category } = req.query;
       const filter = {};
@@ -46,30 +50,63 @@ async function run() {
       res.json(articles);
     });
 
+    // All articles (no filter)
     app.get('/articles', async (req, res) => {
       const articles = await articlesCollection.find().toArray();
       res.send(articles);
     });
 
+    // Get featured articles (latest 6)
     app.get("/api/featured", async (req, res) => {
       const featured = await articlesCollection.find().sort({ createdAt: -1 }).limit(6).toArray();
       res.json(featured);
     });
 
+    // Create new article
     app.post("/api/articles", async (req, res) => {
       const newArticle = req.body;
+      newArticle.createdAt = new Date();
+      newArticle.likes = 0;
       const result = await articlesCollection.insertOne(newArticle);
       res.send(result);
     });
 
+    // Get single article by ID
+    app.get("/api/articles/:id", async (req, res) => {
+      const id = req.params.id;
+      try {
+        const article = await articlesCollection.findOne({ _id: new ObjectId(id) });
+        if (!article) {
+          return res.status(404).send({ message: "Article not found" });
+        }
+        res.send(article);
+      } catch (err) {
+        res.status(500).send({ message: "Error retrieving article" });
+      }
+    });
+
+    // Like an article (increment likes)
+    app.patch("/api/articles/:id/like", async (req, res) => {
+      const id = req.params.id;
+      const result = await articlesCollection.findOneAndUpdate(
+        { _id: new ObjectId(id) },
+        { $inc: { likes: 1 } },
+        { returnDocument: "after" }
+      );
+      res.send(result.value);
+    });
+
+    // Get unique article categories
     app.get('/api/categories', async (req, res) => {
       const categories = await articlesCollection.distinct("category");
       res.json(categories);
     });
 
-    // Comment APIs
+    // -------------------------
+    // 🔹 COMMENT ROUTES
+    // -------------------------
 
-    // Post new comment
+    // Create a new comment
     app.post("/api/comments", async (req, res) => {
       const comment = req.body;
       const newComment = {
@@ -81,12 +118,11 @@ async function run() {
         likes: 0,
         createdAt: new Date(),
       };
-
       const result = await commentsCollection.insertOne(newComment);
       res.send(result);
     });
 
-    // Get all comments or filter by articleId
+    // Get all comments (optional filter by articleId)
     app.get("/api/comments", async (req, res) => {
       const { articleId } = req.query;
       const filter = articleId ? { articleId } : {};
@@ -94,7 +130,7 @@ async function run() {
       res.send(comments);
     });
 
-    // Like (increment likes by 1)
+    // Like a comment
     app.patch("/api/comments/:id/like", async (req, res) => {
       const id = req.params.id;
       const result = await commentsCollection.findOneAndUpdate(
@@ -105,14 +141,16 @@ async function run() {
       res.send(result.value);
     });
 
-    // Delete comment by ID
+    // Delete comment
     app.delete("/api/comments/:id", async (req, res) => {
       const id = req.params.id;
       const result = await commentsCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
-    // MongoDB ping
+    // -------------------------
+    // ✅ DATABASE STATUS CHECK
+    // -------------------------
     await db.command({ ping: 1 });
     console.log("✅ Connected to MongoDB");
 
@@ -123,7 +161,7 @@ async function run() {
 
 run().catch(console.dir);
 
-// Start server
+// Start Server
 app.listen(port, () => {
   console.log(`🚀 UpStudy server running on port ${port}`);
 });
