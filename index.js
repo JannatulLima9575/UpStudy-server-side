@@ -27,6 +27,7 @@ const client = new MongoClient(uri, {
 
 let articlesCollection;
 let commentsCollection;
+let usersCollection;
 
 async function run() {
   try {
@@ -34,33 +35,70 @@ async function run() {
     const db = client.db('upstudy-server');
     articlesCollection = db.collection('articles');
     commentsCollection = db.collection('comments');
+    usersCollection = db.collection('users');
 
-    // ARTICLE ROUTES
+    // USERS ROUTES
+    app.put("/api/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const userData = req.body;
+      const result = await usersCollection.updateOne(
+        { email },
+        { $set: userData },
+        { upsert: true }
+      );
+      res.send(result);
+    });
 
-    // Get all articles (filter by email or category)
+    app.get("/api/users/:email", async (req, res) => {
+      const email = req.params.email;
+      const user = await usersCollection.findOne({ email });
+      res.send(user);
+    });
+
+    // ARTICLES
     app.get("/api/articles", async (req, res) => {
-      const { email, category } = req.query;
+      const { email, category, tag } = req.query;
       const filter = {};
       if (email) filter.authorEmail = email;
       if (category) filter.category = category;
-
-      const articles = await articlesCollection.find(filter).sort({ createdAt: -1 }).toArray();
-      res.json(articles);
+      if (tag) {
+        const tagArray = Array.isArray(tag) ? tag : [tag];
+        filter.tags = { $in: tagArray };
+      }
+      try {
+        const articles = await articlesCollection
+          .find(filter)
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.json(articles);
+      } catch (err) {
+        res.status(500).json({ message: "Error fetching articles" });
+      }
     });
 
-    // All articles (no filter)
-    app.get('/articles', async (req, res) => {
-      const articles = await articlesCollection.find().toArray();
-      res.send(articles);
+    app.get('/api/categories', async (req, res) => {
+      try {
+        const categories = await articlesCollection.distinct("category");
+        res.json(categories);
+      } catch (err) {
+        res.status(500).json({ message: "Failed to fetch categories" });
+      }
     });
 
-    // Featured articles (latest 6)
+    app.get('/api/tags', async (req, res) => {
+      try {
+        const tags = await articlesCollection.distinct("tags");
+        res.send(tags);
+      } catch (err) {
+        res.status(500).send({ message: "Failed to fetch tags" });
+      }
+    });
+
     app.get("/api/featured", async (req, res) => {
       const featured = await articlesCollection.find().sort({ createdAt: -1 }).limit(6).toArray();
       res.json(featured);
     });
 
-    // Create new article
     app.post("/api/articles", async (req, res) => {
       const newArticle = req.body;
       newArticle.createdAt = new Date();
@@ -69,7 +107,6 @@ async function run() {
       res.send(result);
     });
 
-    // Get single article by ID
     app.get("/api/articles/:id", async (req, res) => {
       const id = req.params.id;
       try {
@@ -83,7 +120,6 @@ async function run() {
       }
     });
 
-    // ✅ Like article
     app.patch("/api/articles/:id/like", async (req, res) => {
       const id = req.params.id;
       const result = await articlesCollection.findOneAndUpdate(
@@ -94,46 +130,30 @@ async function run() {
       res.send(result.value);
     });
 
-    // ✅ Get unique article categories
-    app.get('/api/categories', async (req, res) => {
-      const categories = await articlesCollection.distinct("category");
-      res.json(categories);
-    });
-
-    // ✅ DELETE article
     app.delete("/api/articles/:id", async (req, res) => {
       const id = req.params.id;
       const { authorEmail } = req.body;
-
       const article = await articlesCollection.findOne({ _id: new ObjectId(id) });
-
       if (!article) {
         return res.status(404).json({ success: false, message: "Article not found" });
       }
-
       if (article.authorEmail !== authorEmail) {
         return res.status(403).json({ success: false, message: "Unauthorized to delete" });
       }
-
       const result = await articlesCollection.deleteOne({ _id: new ObjectId(id) });
       res.json({ success: result.deletedCount === 1 });
     });
 
-    // ✅ UPDATE article
     app.put("/api/articles/:id", async (req, res) => {
       const id = req.params.id;
       const updatedData = req.body;
-
       const article = await articlesCollection.findOne({ _id: new ObjectId(id) });
-
       if (!article) {
         return res.status(404).json({ success: false, message: "Article not found" });
       }
-
       if (article.authorEmail !== updatedData.authorEmail) {
         return res.status(403).json({ success: false, message: "Unauthorized to update" });
       }
-
       const result = await articlesCollection.updateOne(
         { _id: new ObjectId(id) },
         {
@@ -147,12 +167,10 @@ async function run() {
           }
         }
       );
-
       res.json({ success: result.modifiedCount > 0 });
     });
 
-    // COMMENT ROUTES
-
+    // COMMENTS
     app.post("/api/comments", async (req, res) => {
       const comment = req.body;
       const newComment = {
@@ -175,6 +193,12 @@ async function run() {
       res.send(comments);
     });
 
+    app.get("/api/user-comments", async (req, res) => {
+      const { email } = req.query;
+      const comments = await commentsCollection.find({ userEmail: email }).toArray();
+      res.send(comments);
+    });
+
     app.patch("/api/comments/:id/like", async (req, res) => {
       const id = req.params.id;
       const result = await commentsCollection.findOneAndUpdate(
@@ -191,18 +215,15 @@ async function run() {
       res.send(result);
     });
 
-    // ✅ Database Ping Check
     await db.command({ ping: 1 });
-    console.log("✅ Connected to MongoDB");
-
+    console.log("Connected to MongoDB");
   } catch (err) {
-    console.error("❌ MongoDB connection failed", err);
+    console.error("MongoDB connection failed", err);
   }
 }
 
 run().catch(console.dir);
 
-// Start Server
 app.listen(port, () => {
   console.log(`🚀 UpStudy server running on port ${port}`);
 });
