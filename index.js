@@ -35,11 +35,9 @@ async function run() {
     articlesCollection = db.collection('articles');
     commentsCollection = db.collection('comments');
 
-    // -------------------------
-    // 🔹 ARTICLE ROUTES
-    // -------------------------
+    // ARTICLE ROUTES
 
-    // Get all articles (optional filter by email/category)
+    // Get all articles (filter by email or category)
     app.get("/api/articles", async (req, res) => {
       const { email, category } = req.query;
       const filter = {};
@@ -56,7 +54,7 @@ async function run() {
       res.send(articles);
     });
 
-    // Get featured articles (latest 6)
+    // Featured articles (latest 6)
     app.get("/api/featured", async (req, res) => {
       const featured = await articlesCollection.find().sort({ createdAt: -1 }).limit(6).toArray();
       res.json(featured);
@@ -85,7 +83,7 @@ async function run() {
       }
     });
 
-    // Like an article (increment likes)
+    // ✅ Like article
     app.patch("/api/articles/:id/like", async (req, res) => {
       const id = req.params.id;
       const result = await articlesCollection.findOneAndUpdate(
@@ -96,17 +94,65 @@ async function run() {
       res.send(result.value);
     });
 
-    // Get unique article categories
+    // ✅ Get unique article categories
     app.get('/api/categories', async (req, res) => {
       const categories = await articlesCollection.distinct("category");
       res.json(categories);
     });
 
-    // -------------------------
-    // 🔹 COMMENT ROUTES
-    // -------------------------
+    // ✅ DELETE article
+    app.delete("/api/articles/:id", async (req, res) => {
+      const id = req.params.id;
+      const { authorEmail } = req.body;
 
-    // Create a new comment
+      const article = await articlesCollection.findOne({ _id: new ObjectId(id) });
+
+      if (!article) {
+        return res.status(404).json({ success: false, message: "Article not found" });
+      }
+
+      if (article.authorEmail !== authorEmail) {
+        return res.status(403).json({ success: false, message: "Unauthorized to delete" });
+      }
+
+      const result = await articlesCollection.deleteOne({ _id: new ObjectId(id) });
+      res.json({ success: result.deletedCount === 1 });
+    });
+
+    // ✅ UPDATE article
+    app.put("/api/articles/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedData = req.body;
+
+      const article = await articlesCollection.findOne({ _id: new ObjectId(id) });
+
+      if (!article) {
+        return res.status(404).json({ success: false, message: "Article not found" });
+      }
+
+      if (article.authorEmail !== updatedData.authorEmail) {
+        return res.status(403).json({ success: false, message: "Unauthorized to update" });
+      }
+
+      const result = await articlesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        {
+          $set: {
+            title: updatedData.title,
+            content: updatedData.content,
+            category: updatedData.category,
+            tags: updatedData.tags,
+            thumbnail: updatedData.thumbnail,
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      res.json({ success: result.modifiedCount > 0 });
+    });
+
+    // COMMENT ROUTES
+
     app.post("/api/comments", async (req, res) => {
       const comment = req.body;
       const newComment = {
@@ -122,7 +168,6 @@ async function run() {
       res.send(result);
     });
 
-    // Get all comments (optional filter by articleId)
     app.get("/api/comments", async (req, res) => {
       const { articleId } = req.query;
       const filter = articleId ? { articleId } : {};
@@ -130,7 +175,6 @@ async function run() {
       res.send(comments);
     });
 
-    // Like a comment
     app.patch("/api/comments/:id/like", async (req, res) => {
       const id = req.params.id;
       const result = await commentsCollection.findOneAndUpdate(
@@ -141,16 +185,13 @@ async function run() {
       res.send(result.value);
     });
 
-    // Delete comment
     app.delete("/api/comments/:id", async (req, res) => {
       const id = req.params.id;
       const result = await commentsCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
-    // -------------------------
-    // ✅ DATABASE STATUS CHECK
-    // -------------------------
+    // ✅ Database Ping Check
     await db.command({ ping: 1 });
     console.log("✅ Connected to MongoDB");
 
