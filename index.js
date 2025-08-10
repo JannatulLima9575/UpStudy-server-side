@@ -1,7 +1,8 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-require('dotenv').config();
+
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -31,7 +32,7 @@ let usersCollection;
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db('upstudy-server');
     articlesCollection = db.collection('articles');
     commentsCollection = db.collection('comments');
@@ -58,6 +59,8 @@ async function run() {
     // ARTICLES
     app.get("/api/articles", async (req, res) => {
       const { email, category, tag } = req.query;
+      console.log("email" ,email, "category", category, "tag",tag);
+      
       const filter = {};
       if (email) filter.authorEmail = email;
       if (category) filter.category = category;
@@ -215,8 +218,8 @@ async function run() {
       res.send(result);
     });
 
-    await db.command({ ping: 1 });
-    console.log("Connected to MongoDB");
+    // await db.command({ ping: 1 });
+    // console.log("Connected to MongoDB");
   } catch (err) {
     console.error("MongoDB connection failed", err);
   }
